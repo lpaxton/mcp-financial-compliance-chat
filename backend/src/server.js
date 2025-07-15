@@ -32,11 +32,26 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
+// Add trust proxy setting before rate limiting
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
+
+// Rate limiting configuration
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Skip rate limiting for development
+  skip: process.env.NODE_ENV === 'development' ? () => true : () => false,
+  // Use a simple key generator for development
+  keyGenerator: (req) => {
+    // In development, just use IP or a default key
+    if (process.env.NODE_ENV === 'development') {
+      return req.ip || req.connection.remoteAddress || 'default';
+    }
+    return req.ip;
+  }
 });
 app.use(limiter);
 
@@ -192,11 +207,12 @@ app.use((err, req, res, next) => {
 // Initialize MCP servers
 async function initializeMCPServers() {
   try {
+    console.log('Starting MCP server initialization...');
     await mcpOrchestrator.initialize();
-    console.log('MCP servers initialized successfully');
+    console.log('MCP servers initialization completed');
   } catch (error) {
-    console.error('Failed to initialize MCP servers:', error);
-    process.exit(1);
+    console.warn('MCP servers initialization failed, continuing without MCP:', error.message);
+    // Don't exit the process - continue running without MCP servers
   }
 }
 
@@ -205,7 +221,15 @@ const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  await initializeMCPServers();
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  
+  // Initialize MCP servers (non-blocking)
+  initializeMCPServers().then(() => {
+    console.log('Server fully initialized and ready to accept connections');
+  }).catch((error) => {
+    console.warn('Server started but MCP initialization had issues:', error.message);
+  });
 });
 
 // Graceful shutdown

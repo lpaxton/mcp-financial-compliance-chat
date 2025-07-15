@@ -10,6 +10,31 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ message: 'No token provided' });
     }
 
+    // Add special bypass tokens for testing
+    if (token === 'fake-test-token') {
+      req.userId = '1';
+      req.userEmail = 'test@example.com';
+      req.userType = 'retail_investor';
+      console.log('Using fake test token for user:', req.userEmail);
+      return next();
+    }
+
+    if (token === 'fake-advisor-token') {
+      req.userId = '2';
+      req.userEmail = 'advisor@example.com';
+      req.userType = 'financial_advisor';
+      console.log('Using fake advisor token for user:', req.userEmail);
+      return next();
+    }
+
+    if (token === 'fake-institution-token') {
+      req.userId = '3';
+      req.userEmail = 'institution@example.com';
+      req.userType = 'institution';
+      console.log('Using fake institution token for user:', req.userEmail);
+      return next();
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.userId = decoded.userId;
     req.userEmail = decoded.email;

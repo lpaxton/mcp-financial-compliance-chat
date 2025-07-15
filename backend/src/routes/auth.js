@@ -88,7 +88,15 @@ router.post('/login', [
     }
 
     // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    let isPasswordValid = false;
+
+    // For fake users, allow the password "password"
+    if (password === 'password' && ['test@example.com', 'advisor@example.com', 'institution@example.com'].includes(email)) {
+      isPasswordValid = true;
+    } else {
+      isPasswordValid = await bcrypt.compare(password, user.password);
+    }
+
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -132,6 +140,58 @@ router.get('/validate', authMiddleware, async (req, res) => {
     console.error('Token validation error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
+});
+
+// Fake login endpoint for testing
+router.post('/fake-login', async (req, res) => {
+  try {
+    const { userType = 'retail_investor' } = req.body;
+    
+    let user, token;
+    
+    switch (userType) {
+      case 'financial_advisor':
+        user = await User.findByEmail('advisor@example.com');
+        token = 'fake-advisor-token';
+        break;
+      case 'institution':
+        user = await User.findByEmail('institution@example.com');
+        token = 'fake-institution-token';
+        break;
+      default:
+        user = await User.findByEmail('test@example.com');
+        token = 'fake-test-token';
+    }
+
+    if (!user) {
+      return res.status(500).json({ message: 'Fake user not found' });
+    }
+
+    // Update last login
+    await User.updateLastLogin(user.id);
+
+    // Remove password from response
+    const { password: _, ...userResponse } = user;
+
+    res.json({
+      message: 'Fake login successful',
+      token,
+      user: userResponse,
+      note: 'This is a fake authentication system for testing'
+    });
+
+  } catch (error) {
+    console.error('Fake login error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Debug endpoint to see all fake users
+router.get('/fake-users', (req, res) => {
+  res.json({
+    users: User.getAllUsers(),
+    note: 'These are fake users for testing'
+  });
 });
 
 // Helper function to determine user permissions
