@@ -1,0 +1,30 @@
+// mcp-servers/topic-control-mcp/package.json
+{
+  "name": "topic-control-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server for Financial Topic Control and Validation",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "financial",
+    "topic-control",
+    "compliance"
+  ],
+  "author": "Your Organization",
+  "license": "MIT"
+}

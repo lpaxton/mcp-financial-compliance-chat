@@ -1,0 +1,60 @@
+// backend/package.json
+{
+  "name": "mcp-financial-chat-backend",
+  "version": "1.0.0",
+  "description": "MCP Financial Compliance Chat Backend Server",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest",
+    "lint": "eslint src/",
+    "mcp:start": "concurrently \"npm run mcp:topic\" \"npm run mcp:finra\" \"npm run mcp:sec\"",
+    "mcp:topic": "cd ../mcp-servers/topic-control-mcp && npm start",
+    "mcp:finra": "cd ../mcp-servers/finra-compliance-mcp && npm start", 
+    "mcp:sec": "cd ../mcp-servers/sec-compliance-mcp && npm start"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "pg": "^8.11.3",
+    "winston": "^3.11.0",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "axios": "^1.6.2",
+    "validator": "^13.11.0",
+    "express-validator": "^7.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "eslint": "^8.55.0",
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "fintech",
+    "mcp",
+    "compliance",
+    "finra",
+    "sec",
+    "chat",
+    "ai"
+  ],
+  "author": "Your Organization",
+  "license": "MIT"
+}
+
+
+
+
+
+
