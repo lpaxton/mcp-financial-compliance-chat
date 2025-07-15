@@ -3,12 +3,12 @@
 // Fake user database - stored in memory
 const fakeUsers = new Map();
 
-// Pre-populate with some test users
+// Pre-populate with some test users - FIXED EMAIL ADDRESSES
 const testUsers = [
   {
     id: '1',
-    email: 'test@test.com',
-    password: '1234', // password: 'password'
+    email: 'test@example.com',  // ← Fixed: was test@test.com
+    password: '$2a$12$LQv3c1yqBWVHxkd0LQ4YCuXkzOqPIACiZ8v1mVNDXb1g.1gOq3OO.', // password: 'password'
     name: 'Test User',
     type: 'retail_investor',
     finraRegistered: false,
@@ -19,8 +19,8 @@ const testUsers = [
   },
   {
     id: '2',
-    email: 'test2@test.com',
-    password: '1234', // password: 'password'
+    email: 'advisor@example.com',  // ← Fixed: was test2@test.com
+    password: '$2a$12$LQv3c1yqBWVHxkd0LQ4YCuXkzOqPIACiZ8v1mVNDXb1g.1gOq3OO.', // password: 'password'
     name: 'Financial Advisor',
     type: 'financial_advisor',
     finraRegistered: true,
@@ -31,8 +31,8 @@ const testUsers = [
   },
   {
     id: '3',
-    email: 'test3@test.com',
-    password: '1234', // password: 'password'
+    email: 'institution@example.com',  // ← Fixed: was test3@test.com
+    password: '$2a$12$LQv3c1yqBWVHxkd0LQ4YCuXkzOqPIACiZ8v1mVNDXb1g.1gOq3OO.', // password: 'password'
     name: 'Institutional User',
     type: 'institution',
     finraRegistered: true,
