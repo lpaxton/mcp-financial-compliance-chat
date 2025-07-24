@@ -1,185 +1,180 @@
 // backend/src/services/ChatService.js
 const axios = require('axios');
-const AuditService = require('./AuditService');
 
 class ChatService {
   constructor(mcpOrchestrator) {
     this.mcpOrchestrator = mcpOrchestrator;
-    this.auditService = new AuditService();
     this.claudeApiKey = process.env.CLAUDE_API_KEY;
-    this.claudeApiUrl = process.env.CLAUDE_API_URL || 'https://api.anthropic.com/v1/messages';
-    this.claudeModel = process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022';
+    this.claudeApiUrl = 'https://api.anthropic.com/v1/messages';
   }
 
   async processMessage(message, userContext) {
     const processingId = `PROC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     try {
-      // Extract the message content if it's an object
-      let messageContent = message;
-      if (typeof message === 'object') {
-        messageContent = message.content || message.message || JSON.stringify(message);
-      }
-      
-      // Log message processing start
-      await this.auditService.logEvent('processing', 'message_start', {
-        processingId,
-        userId: userContext.id,
-        messageLength: String(messageContent).length,
-        timestamp: new Date().toISOString()
-      });
+      console.log(`📝 Processing message: ${processingId}`);
 
-      // Step 1: MCP Pre-validation (simplified for now)
-      const validationResult = { approved: true };
+      // Step 1: MCP Pre-validation
+      const validationResult = await this.mcpOrchestrator.validateMessage(message, userContext);
       
-      // Step 2: Generate AI response
-      const aiResponse = await this.generateAIResponse(messageContent, userContext);
-      
-      if (!aiResponse.success) {
-        await this.auditService.logEvent('processing', 'ai_error', {
-          processingId,
-          error: aiResponse.error
-        });
-        
+      if (!validationResult.approved) {
+        console.log(`❌ Validation failed: ${validationResult.reason}`);
         return {
           success: false,
-          error: "Failed to generate AI response",
+          error: validationResult.reason,
+          suggestions: validationResult.suggestions,
+          stage: 'validation'
+        };
+      }
+
+      console.log('✅ MCP validation passed');
+
+      // Step 2: Generate Claude response
+      const claudeResponse = await this.generateClaudeResponse(message, userContext, validationResult);
+      
+      if (!claudeResponse.success) {
+        console.log(`❌ Claude generation failed: ${claudeResponse.error}`);
+        return {
+          success: false,
+          error: claudeResponse.error,
           stage: 'generation'
         };
       }
 
-      // Step 3: Return successful response
-      await this.auditService.logEvent('processing', 'message_complete', {
-        processingId,
-        userId: userContext.id,
-        messageLength: String(messageContent).length,
-        responseLength: aiResponse.response.length,
-        timestamp: new Date().toISOString()
-      });
+      console.log('✅ Claude response generated');
+
+      // Step 3: MCP Post-validation (Response Audit)
+      const auditResult = await this.mcpOrchestrator.auditResponse(
+        claudeResponse.response,
+        message,
+        userContext,
+        validationResult.validationResults
+      );
+
+      if (!auditResult.approved) {
+        console.log(`❌ Response audit failed`);
+        return {
+          success: false,
+          error: 'Response failed compliance audit',
+          stage: 'audit'
+        };
+      }
+
+      console.log('✅ Response audit passed');
+
+      // Step 4: Finalize response with disclaimers
+      const finalResponse = {
+        content: claudeResponse.response.content,
+        disclaimers: auditResult.disclaimers,
+        complianceMetadata: auditResult.complianceMetadata,
+        processingId
+      };
+
+      console.log(`✅ Message processed successfully: ${processingId}`);
 
       return {
         success: true,
-        response: aiResponse.response,
-        complianceMetadata: {
-          processingId,
-          disclaimers: this.getDisclaimers(userContext.type, messageContent),
-          regulations: this.getApplicableRegulations(userContext.type),
-          processingTime: new Date().toISOString()
-        }
+        response: finalResponse,
+        complianceMetadata: auditResult.complianceMetadata
       };
 
     } catch (error) {
-      console.error('Message processing error:', error);
-      await this.auditService.logEvent('processing', 'error', {
-        processingId,
-        error: error.message
-      });
+      console.error('❌ Chat processing error:', error);
       return {
         success: false,
-        error: "Internal processing error",
-        stage: 'processing'
+        error: 'Internal processing error',
+        stage: 'system_error'
       };
     }
   }
 
-  async generateAIResponse(message, userContext) {
+  async generateClaudeResponse(message, userContext, validationResult) {
     try {
-      // Extract message content if it's an object
-      let messageContent = message;
-      if (typeof message === 'object') {
-        messageContent = message.content || message.message || JSON.stringify(message);
-      }
+      // Build context for Claude with compliance constraints
+      const systemPrompt = this.buildSystemPrompt(userContext, validationResult);
+      const userPrompt = message.content || message;
 
-      // Check if we have an API key
-      if (!this.claudeApiKey || this.claudeApiKey === 'your-anthropic-api-key-here') {
-        console.warn('No valid Claude API key found, using placeholder response');
-        return {
-          success: true,
-          response: `Thank you for your question about "${messageContent}". This is a placeholder response since the Claude API key is not configured. In a real setup, you would receive an AI-generated answer about your financial question.`
-        };
-      }
-
-      // Call Claude 3.5 Sonnet API
-      const response = await axios.post(this.claudeApiUrl, {
-        model: this.claudeModel,
-        max_tokens: 1024,
+      const requestBody = {
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 1000,
         messages: [
           {
             role: 'user',
-            content: `You are a financial education assistant. The user is a ${userContext.type}. Please provide helpful, educational information about: ${messageContent}
-
-Important: Keep responses factual and educational. Include appropriate disclaimers about investment risks.`
+            content: userPrompt
           }
-        ]
-      }, {
+        ],
+        system: systemPrompt
+      };
+
+      console.log('🤖 Calling Claude API...');
+
+      const response = await axios.post(this.claudeApiUrl, requestBody, {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.claudeApiKey,
           'anthropic-version': '2023-06-01'
-        }
+        },
+        timeout: 30000
       });
-
-      const aiResponse = response.data.content[0].text;
 
       return {
         success: true,
-        response: aiResponse
+        response: {
+          content: response.data.content[0].text,
+          usage: response.data.usage,
+          model: response.data.model
+        }
       };
 
     } catch (error) {
-      console.error('AI response generation error:', error);
-      // Provide fallback response for development
-      if (process.env.NODE_ENV === 'development') {
-        let messageContent = typeof message === 'string' ? message : JSON.stringify(message);
-        return {
-          success: true,
-          response: `This is a fallback response to your question about "${messageContent}" since the AI service is not available. In production, you would receive an AI-generated answer about your financial question.`
-        };
+      console.error('❌ Claude API error:', error.response?.data || error.message);
+      
+      // Return fallback response if Claude fails
+      return this.getFallbackResponse(message, userContext);
+    }
+  }
+
+  buildSystemPrompt(userContext, validationResult) {
+    return `You are a financial education assistant operating under strict FINRA and SEC compliance requirements. You must:
+
+1. NEVER make specific investment recommendations
+2. NEVER guarantee returns or claim investments are risk-free
+3. Always emphasize that investments involve risk
+4. Focus on general financial education
+5. Encourage users to consult with qualified financial advisors
+6. Stay within approved topic boundaries
+
+User Type: ${userContext.type}
+FINRA Registered: ${userContext.finraRegistered}
+SEC Registered: ${userContext.secRegistered}
+
+Provide educational, compliant responses about financial topics. Keep responses informative but general, avoiding specific investment advice.`;
+  }
+
+  getFallbackResponse(message, userContext) {
+    const fallbacks = {
+      portfolio: "A diversified portfolio typically includes different asset classes to help manage risk. The specific allocation should be based on your individual circumstances, risk tolerance, and investment timeline. Please consult with a qualified financial advisor for personalized guidance.",
+      
+      risk: "All investments carry some level of risk, including the potential loss of principal. Understanding and managing risk through diversification and appropriate asset allocation is fundamental to investing.",
+      
+      retirement: "Retirement planning involves considering multiple factors including your current age, target retirement age, expected expenses, and risk tolerance. Professional guidance is recommended for retirement planning.",
+      
+      default: "I can provide general financial education on topics like portfolio basics, risk management, and investment fundamentals. For specific advice tailored to your situation, please consult with a qualified financial advisor."
+    };
+
+    const messageText = typeof message === 'string' ? message : message.content || '';
+    const key = Object.keys(fallbacks).find(k => 
+      messageText.toLowerCase().includes(k)
+    ) || 'default';
+
+    return {
+      success: true,
+      response: {
+        content: fallbacks[key],
+        usage: { tokens: 0 },
+        model: 'fallback'
       }
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  // Helper methods for compliance metadata
-  getDisclaimers(userType, message) {
-    const generalDisclaimer = "This information is for educational purposes only and not financial advice.";
-    const investmentDisclaimer = "All investments involve risk, including the possible loss of principal.";
-    
-    let disclaimers = [generalDisclaimer];
-    
-    // Safely handle message content
-    let messageText = '';
-    if (typeof message === 'string') {
-      messageText = message.toLowerCase();
-    } else if (typeof message === 'object' && message !== null) {
-      messageText = (message.content || message.message || '').toLowerCase();
-    }
-    
-    // Add specific disclaimers based on message content
-    if (messageText.includes("investment") || 
-        messageText.includes("stock") || 
-        messageText.includes("portfolio")) {
-      disclaimers.push(investmentDisclaimer);
-    }
-    
-    return disclaimers;
-  }
-
-  getApplicableRegulations(userType) {
-    // Base regulations that apply to all
-    const regulations = ["SEC Securities Act"];
-    
-    // Add specific regulations based on user type
-    if (userType === "financial_advisor") {
-      regulations.push("FINRA Rule 2210", "SEC Investment Advisers Act");
-    } else if (userType === "institution") {
-      regulations.push("SEC Regulation S-P", "Bank Secrecy Act");
-    }
-    
-    return regulations;
+    };
   }
 }
 
